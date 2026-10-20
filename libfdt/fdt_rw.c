@@ -339,6 +339,7 @@ int fdt_add_subnode_namelen(void *fdt, int parentoffset,
 	int err;
 	uint32_t tag;
 	fdt32_t *endtag;
+	int depth = 0;
 
 	FDT_RW_PROBE(fdt);
 
@@ -348,15 +349,16 @@ int fdt_add_subnode_namelen(void *fdt, int parentoffset,
 	else if (offset != -FDT_ERR_NOTFOUND)
 		return offset;
 
-	/* Try to place the new node after the parent's properties */
-	tag = fdt_next_tag(fdt, parentoffset, &nextoffset);
-	/* the fdt_subnode_offset_namelen() should ensure this never hits */
-	if (!can_assume(LIBFDT_FLAWLESS) && (tag != FDT_BEGIN_NODE))
-		return -FDT_ERR_INTERNAL;
+	/* Try to place the new node at the end of the parent */
+	nextoffset = parentoffset;
 	do {
 		offset = nextoffset;
 		tag = fdt_next_tag(fdt, offset, &nextoffset);
-	} while ((tag == FDT_PROP) || (tag == FDT_NOP));
+		if (tag == FDT_BEGIN_NODE)
+			depth++;
+		else if (tag == FDT_END_NODE)
+			depth--;
+	} while (depth > 0);
 
 	nh = fdt_offset_ptr_w_(fdt, offset);
 	nodelen = sizeof(*nh) + FDT_TAGALIGN(namelen+1) + FDT_TAGSIZE;
@@ -398,7 +400,7 @@ static void fdt_packblocks_(const char *old, char *new,
 			    int struct_size,
 			    int strings_size)
 {
-	uint32_t mem_rsv_off, struct_off, strings_off;
+	int mem_rsv_off, struct_off, strings_off;
 
 	mem_rsv_off = FDT_ALIGN(sizeof(struct fdt_header), 8);
 	struct_off = mem_rsv_off + mem_rsv_size;
